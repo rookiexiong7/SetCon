@@ -58,6 +58,20 @@ def parse_args():
 def master_print(msg):
     print(msg)
 
+
+def copy_weight_from_state_dict(state_dict, keys, target_weight, weight_name):
+    for key in keys:
+        if key in state_dict:
+            target_weight.data.copy_(state_dict[key])
+            print(f"Successfully updated {weight_name} weight from key: {key}")
+            return True
+    print(
+        f"Warning: {weight_name} weight key not found in state_dict. "
+        f"Tried: {keys}. Keeping the base model weight."
+    )
+    return False
+
+
 def main():
     args = parse_args()
 
@@ -70,6 +84,7 @@ def main():
 
     # load config
     cfg = Config.fromfile(args.config)
+    arch_type = cfg.model.get('arch_type', 'internvl')
     model = BUILDER.build(cfg.model)
     backend = get_file_backend(args.pth_model)
 
@@ -82,24 +97,33 @@ def main():
 
     model.load_state_dict(state_dict, strict=False)
     print(f'Load PTH model from {args.pth_model}')
-    
-    print("Force updating lm_head weight from pretrained state_dict.")
-    # lm_head_key = 'mllm.model.lm_head.weight'
-    lm_head_key = 'mllm.model.base_model.model.lm_head.modules_to_save.default.weight'
-    if lm_head_key in state_dict:
-        lm_head_weight = state_dict[lm_head_key]
-        model.mllm.model.get_output_embeddings().weight.data.copy_(lm_head_weight)
-        print(f"Successfully updated lm_head weight from key: {lm_head_key}")
+
+    if 'qwen' in arch_type:
+        lm_head_keys = [
+            'mllm.model.base_model.model.lm_head.modules_to_save.default.weight',
+            'mllm.model.lm_head.weight',
+        ]
+        embed_tokens_keys = [
+            'mllm.model.base_model.model.model.language_model.embed_tokens.modules_to_save.default.weight',
+            'mllm.model.model.language_model.embed_tokens.weight',
+        ]
     else:
-        print(f"Warning: lm_head weight key '{lm_head_key}' not found in state_dict.")
-    
-    emd_key = 'mllm.model.base_model.model.model.language_model.embed_tokens.modules_to_save.default.weight'
-    if emd_key in state_dict:
-        emd_weight = state_dict[emd_key]
-        model.mllm.model.get_input_embeddings().weight.data.copy_(emd_weight)
-        print(f"Successfully updated emd weight from key: {emd_key}")
-    else:
-        print(f"Warning: emd weight key '{emd_key}' not found in state_dict.")
+        lm_head_keys = [
+            'mllm.model.language_model.base_model.model.lm_head.modules_to_save.default.weight',
+            'mllm.model.language_model.lm_head.weight',
+        ]
+        embed_tokens_keys = [
+            'mllm.model.language_model.base_model.model.model.embed_tokens.modules_to_save.default.weight',
+            'mllm.model.language_model.model.embed_tokens.weight',
+        ]
+
+    print("Force updating lm_head and embed_tokens weights from state_dict when available.")
+    copy_weight_from_state_dict(
+        state_dict, lm_head_keys, model.mllm.model.get_output_embeddings().weight, 'lm_head'
+    )
+    copy_weight_from_state_dict(
+        state_dict, embed_tokens_keys, model.mllm.model.get_input_embeddings().weight, 'embed_tokens'
+    )
 
     iter_str = os.path.basename(args.pth_model).split('.')[0]
 
@@ -122,11 +146,7 @@ def main():
     if 'qwen3' in cfg.path.lower():
         from projects.setcon.hf.models_qwen3vl.configuration_setcon_chat import SetConChatConfigQwen
         from projects.setcon.hf.models_qwen3vl.modeling_setcon_qwen import SetConChatModelQwen
-    else:
-        from projects.setcon.hf.models_qwen2_5_vl.configuration_setcon_chat import SetConChatConfigQwen
-        from projects.setcon.hf.models_qwen2_5_vl.modeling_setcon_qwen import SetConChatModelQwen
 
-    arch_type = cfg.model.get('arch_type', 'internvl')
     print("arch_type:", arch_type)
     print(cfg.model)
 

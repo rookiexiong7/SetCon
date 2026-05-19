@@ -34,8 +34,8 @@ REVOS_FRAME_ROOT = 'ReVOS'
 path = 'pretrained/models--OpenGVLab--InternVL3_5-8B/snapshots/9bb6a56ad9cc69db95e2d4eeb15a52bbcac4ef79'
 pretrained_pth = None
 
-template = "internlm2_chat"
-prompt_template = PROMPT_TEMPLATE.internlm2_chat
+template = "qwen_chat"
+prompt_template = PROMPT_TEMPLATE.qwen_chat
 max_length = 8192
 
 batch_size = 2
@@ -142,6 +142,7 @@ model = dict(
             lora_dropout=0.05,
             bias='none',
             task_type='CAUSAL_LM',
+            modules_to_save=['lm_head', 'embed_tokens'],
             target_modules=None,
         ),
     ),

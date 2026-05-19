@@ -76,6 +76,8 @@ class SetConModel(BaseModel):
         
         if self.arch_type == 'qwen' and self.mllm.use_llm_lora:
             self.mllm.manual_prepare_llm_for_lora()
+        if self.arch_type == 'intern_vl' and self.mllm.llm_lora_config:
+            self.mllm.manual_prepare_llm_for_lora()
         
         if pretrained_pth is not None:
             pretrained_state_dict = torch.load(pretrained_pth, map_location='cpu', weights_only=False)['state_dict']

@@ -70,7 +70,6 @@ The evaluation code can be found in `projects/setcon/evaluation`. Please organiz
 
 ```bash
 # Image eval
-
 python projects/setcon/evaluation/image_eval.py path/to/model \
   --ann_file path/to/benchmark \
   --dataset [grefcoco|muse|refcoco] # selects the benchmark family and its default metric
@@ -84,7 +83,7 @@ python projects/setcon/evaluation/video_eval.py \
   --output-root path/to/outputdir
 ```
 
-### 4. Training
+### 5. Training
 Download the pretrained [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) and [SAM 3](https://huggingface.co/facebook/sam3), and place them in the ./pretrained directory.
 
 Then, download the original frames and SetCon annotations from [🤗HuggingFace](https://huggingface.co/datasets/rookiexiong/setcon_training_datasets) and place the SetCon training annotations in the following directory:
@@ -114,6 +113,11 @@ Before training, update the image and video frame root variables in the config t
 Please run the following script to train using 8 GPUs. We suggest using at least 8 A100 GPUs:
 ```bash
 bash tools/dist.sh train projects/setcon/configs/setcon_qwenvl_8b.py 8
+```
+
+After that, run the following script to convert trained model to huggingface format
+```bash
+python tools/convert_to_hf.py projects/setcon/configs/setcon_qwenvl_8b.py --pth-model PATH_TO_PTH_MODEL --save-path PATH_TO_SAVE_FOLDER
 ```
 
 

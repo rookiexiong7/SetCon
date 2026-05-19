@@ -77,7 +77,13 @@ class InternVLMLLM(InternVL_V1_5):
 
 
     def manual_prepare_llm_for_lora(self):
+        if self.llm_lora_config is None:
+            return
+        if hasattr(self.model.language_model, 'peft_config'):
+            self.use_llm_lora = True
+            return
         self._prepare_llm_for_lora(self.llm_lora_config)
+        self.use_llm_lora = True
 
 
     def get_embedding_size(self):
