@@ -21,8 +21,8 @@ sys.path.insert(0, str(ROOT))
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SetCon video inference.")
-    parser.add_argument("--model-path", required=True, help="Qwen/SetCon model path.")
-    parser.add_argument("--sam3-ckpt", default=None, help="Optional SAM3 checkpoint.")
+    parser.add_argument("--model-path", required=True, help="SetCon model path.")
+    parser.add_argument("--sam3-ckpt", required=True, help="SAM3 checkpoint.")
     parser.add_argument("--meta-json", required=True, help="Benchmark meta_expressions json.")
     parser.add_argument("--frame-root", required=True, help="Root that contains video frame folders.")
     parser.add_argument("--output-root", required=True, help="Output root: output_root/video_id/expr_id/frame.png.")
