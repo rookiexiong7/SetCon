@@ -3,7 +3,7 @@
 Official implementation of **SetCon: Towards Open-Ended Referring Segmentation via Set-Level Concept Prediction**.
 
 <p align="center" style="font-size: 5 em; margin-top: 0.5em">
-    <a href="https://arxiv.org/abs/2605.xxxxx" style="text-decoration: none; margin: 0 10px;">
+    <a href="https://arxiv.org/abs/2605.20110" style="text-decoration: none; margin: 0 10px;">
     <img src="https://img.shields.io/badge/Paper-arXiv-b31b1b?logo=arxiv&style=for-the-badge">
     </a>
     <a href="https://github.com/rookiexiong7/SetCon" style="text-decoration: none; margin: 0 10px;">
@@ -19,7 +19,7 @@ Official implementation of **SetCon: Towards Open-Ended Referring Segmentation v
 </p>
 
 ## 📜 News
-🚀 [2026/5/20] The [Paper](https://arxiv.org/abs/2605.xxxxx) and [Code](https://github.com/rookiexiong7/SetCon) are released!
+🚀 [2026/5/20] The [Paper](https://arxiv.org/abs/2605.20110) and [Code](https://github.com/rookiexiong7/SetCon) are released!
 
 ## 🔥 Highlights
 
@@ -129,5 +129,10 @@ This repo benefits from [SAM 3](https://github.com/facebookresearch/sam3) and [S
 ## ✒️ Citation
 If you find our work helpful for your research, please consider giving a star ⭐ and citation 📝
 ```bibtex
-
+@article{zhang2026setcon,
+  title={SetCon: towards open-ended referring segmentation via set-level concept prediction},
+  author={Zhixiong Zhang and Yizhuo Li and Shuangrui Ding and Yuhang Zang and Shengyuan Ding and Long Xing and Yibin Wang and Qiaosheng Zhang and Jiaqi Wang},
+  journal={arXiv preprint arXiv:2605.20110},
+  year={2026}
+}
 ```

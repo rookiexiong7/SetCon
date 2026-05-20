@@ -12,7 +12,7 @@ def parse_args():
     parser.add_argument(
         '--save-path', type=str, default=None, help='save path for PTH model')
     parser.add_argument(
-        '--arch-type', type=str, required=True, choices=['internvl', 'qwen'],
+        '--arch-type', type=str, required=True, choices=['intern_vl', 'qwen'],
         help='Model architecture type')
     args = parser.parse_args()
     return args
@@ -37,7 +37,7 @@ def main():
 
     # Convert HF state dict back to original format
     original_state_dict = {}
-    if args.arch_type == 'internvl':
+    if args.arch_type == 'intern_vl':
         # Reverse mapping for InternVL based models
         # Original mapping in convert_to_hf.py was:
         # name_map = {'mllm.model.': '', '.gamma': '.g_weight'}

@@ -84,7 +84,7 @@ def main():
 
     # load config
     cfg = Config.fromfile(args.config)
-    arch_type = cfg.model.get('arch_type', 'internvl')
+    arch_type = cfg.model.get('arch_type', 'intern_vl')
     model = BUILDER.build(cfg.model)
     backend = get_file_backend(args.pth_model)
 
