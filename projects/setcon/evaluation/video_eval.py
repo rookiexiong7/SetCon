@@ -51,6 +51,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _model_family(model_path: str | Path) -> str:
+    config_path = Path(model_path) / "config.json"
+    with config_path.open("r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    architectures = set(config.get("architectures") or [])
+    if "SetConChatModelQwen" in architectures or "text_config" in config:
+        return "qwen3vl"
+    if "SetConChatModel" in architectures or "llm_config" in config:
+        return "internvl"
+    raise ValueError(f"Unsupported SetCon model config: {config_path}")
+
+
 def _expression_text(expr_item: Any) -> str:
     if isinstance(expr_item, dict):
         return (
@@ -301,11 +314,14 @@ def main() -> None:
             )
         return
 
-    from projects.setcon.hf.models_qwen3vl.video_predictor import build_setcon_video_predictor
-
+    if _model_family(args.model_path) == "internvl":
+        from projects.setcon.hf.models.video_predictor import build_setcon_video_predictor
+    else:
+        from projects.setcon.hf.models_qwen3vl.video_predictor import build_setcon_video_predictor
+    
     predictor = build_setcon_video_predictor(
         bpe_path="third_parts/sam3/assets/bpe_simple_vocab_16e6.txt.gz",
-        qwen_model_name_or_path=args.model_path,
+        model_name_or_path=args.model_path,
         sam3_checkpoint_path=args.sam3_ckpt,
         device="cuda",
         torch_dtype=torch.bfloat16,

@@ -4,7 +4,7 @@ from third_parts.sam3.model.sam3_video_predictor import (
 )
 
 
-class SetConQwenVideoPredictor(_Sam3VideoPredictor):
+class SetConInternVLVideoPredictor(_Sam3VideoPredictor):
     def __init__(
         self,
         model_name_or_path,
@@ -25,6 +25,7 @@ class SetConQwenVideoPredictor(_Sam3VideoPredictor):
         torch_dtype=None,
         compile=False,
     ):
+        del geo_encoder_use_img_cross_attn, strict_state_dict_loading
         self.async_loading_frames = async_loading_frames
         self.video_loader_type = video_loader_type
         from .video_predictor_builder import build_setcon_video_model
@@ -50,11 +51,16 @@ class SetConQwenVideoPredictor(_Sam3VideoPredictor):
         )
 
 
-class SetConQwenVideoPredictorMultiGPU(_Sam3VideoPredictorMultiGPU, SetConQwenVideoPredictor):
+class SetConInternVLVideoPredictorMultiGPU(
+    _Sam3VideoPredictorMultiGPU,
+    SetConInternVLVideoPredictor,
+):
     pass
 
 
 def build_setcon_video_predictor(*model_args, gpus_to_use=None, **model_kwargs):
-    return SetConQwenVideoPredictorMultiGPU(
-        *model_args, gpus_to_use=gpus_to_use, **model_kwargs
+    return SetConInternVLVideoPredictorMultiGPU(
+        *model_args,
+        gpus_to_use=gpus_to_use,
+        **model_kwargs,
     )

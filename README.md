@@ -41,7 +41,7 @@ source .venv/bin/activate
 ```
 
 
-### 2. Download the Pretrained Checkpoints
+### 2. Download the Checkpoints
 
 Download the SetCon checkpoint from [🤗HuggingFace](https://huggingface.co/rookiexiong/SetCon-8B) and place it in the following directory:
 ```

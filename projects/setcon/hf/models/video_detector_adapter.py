@@ -1,6 +1,5 @@
-import math
-from typing import Any, Dict, List, Optional, Tuple
-import os
+from typing import Any, List, Optional, Tuple
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -9,9 +8,9 @@ from torch import nn
 
 
 class _BackboneProxy:
-    """Proxy SAM3 backbone calls and cache the latest text prompt for Qwen detector."""
+    """Proxy SAM3 backbone calls and cache the latest text prompt."""
 
-    def __init__(self, adapter: "SetConQwenVideoDetectorAdapter", backbone: nn.Module):
+    def __init__(self, adapter: "SetConInternVLVideoDetectorAdapter", backbone: nn.Module):
         self._adapter = adapter
         self._backbone = backbone
 
@@ -23,9 +22,9 @@ class _BackboneProxy:
         return getattr(self._backbone, name)
 
 
-class SetConQwenVideoDetectorAdapter(nn.Module):
+class SetConInternVLVideoDetectorAdapter(nn.Module):
     """
-    Keep SAM3 detector interface unchanged, but swap detection outputs with SetCon-Qwen model outputs.
+    Keep SAM3 detector interface unchanged, but swap detection outputs with SetCon-InternVL outputs.
 
     The SAM3 feature detector is still used to produce tracker backbone features required by SAM3 tracker.
     """
@@ -55,7 +54,6 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         self.rank = getattr(self.feature_detector, "rank", 0)
         self.world_size = getattr(self.feature_detector, "world_size", 1)
 
-        # Cache Video feature
         self._cached_video_uid: Optional[int] = None
         self._cached_total_frames: int = -1
         self._cached_text_prompt: str = ""
@@ -75,7 +73,6 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
 
     def _normalize_xyxy(self, boxes: np.ndarray, w: int, h: int) -> np.ndarray:
         boxes = boxes.astype(np.float32).reshape(-1, 4)
-        # If likely cxcywh, convert to xyxy.
         if np.any(boxes[:, 2] < boxes[:, 0]) or np.any(boxes[:, 3] < boxes[:, 1]):
             cx, cy, bw, bh = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
             x1 = cx - bw / 2.0
@@ -94,8 +91,7 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
             return np.zeros((0,), dtype=np.float32)
         if torch.is_tensor(scores):
             scores = scores.detach().float().cpu().numpy()
-        scores = np.asarray(scores, dtype=np.float32).reshape(-1)
-        return scores
+        return np.asarray(scores, dtype=np.float32).reshape(-1)
 
     @staticmethod
     def _to_numpy(x: Any) -> Optional[np.ndarray]:
@@ -132,7 +128,6 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
             image=frame_pil,
             seg_hidden_states=seg_hidden_states,
         )
-
 
         all_boxes, all_masks, all_scores = [], [], []
         img_w, img_h = frame_pil.size
@@ -204,7 +199,10 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         num_segments = len(sampled_indices)
 
         sampled_frames = [self._tensor_to_pil(img_batch[idx]) for idx in sampled_indices]
-        prompt = "Given the video context frames and the description \"{}\", please segment all the objects matching the description.".format(text_prompt)
+        prompt = (
+            'Given the video context frames and the description "{}", '
+            "please segment all the objects matching the description."
+        ).format(text_prompt)
         hs_result = self.setcon_model.infer_hidden_states(
             video=sampled_frames,
             text=prompt,
@@ -213,7 +211,7 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         )
         print("[INFO] Text Prompt: ", text_prompt)
         print("[INFO] Pred Text: ", hs_result.get("prediction", ""))
-    
+
         shared = hs_result.get("seg_hidden_states", []) or []
         per_frame_hidden_states = [shared for _ in range(num_segments)]
 
@@ -224,14 +222,12 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         self._cached_hidden_states_per_segment = per_frame_hidden_states
 
     def forward_video_grounding_multigpu(self, **kwargs):
-        # 1) Run original SAM3 detector to keep backbone/tracker features unchanged.
         sam3_out, aux = self.feature_detector.forward_video_grounding_multigpu(**kwargs)
-        # 2) Replace detection outputs with SetCon-Qwen outputs.
         text_prompt = self._last_text_batch[0] if len(self._last_text_batch) > 0 else ""
 
         img_batch = kwargs["backbone_out"]["img_batch_all_stages"]
         total_frames = int(img_batch.shape[0])
-        
+
         frame_idx = int(kwargs["frame_idx"])
         frame_idx = max(0, min(total_frames - 1, frame_idx))
         current_frame = self._tensor_to_pil(img_batch[frame_idx])
@@ -240,7 +236,7 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         segment_idx = self._frame_to_segment(frame_idx, self._cached_sampled_indices)
         seg_hidden_states = self._cached_hidden_states_per_segment[segment_idx]
 
-        pred_masks_ref = sam3_out["pred_masks"]  # [B, Q, H, W]
+        pred_masks_ref = sam3_out["pred_masks"]
         bsz, num_queries, mask_h, mask_w = pred_masks_ref.shape
         device = pred_masks_ref.device
         boxes, masks, scores = self._collect_setcon_dets(
@@ -267,4 +263,3 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         sam3_out["pred_boxes_xyxy"] = pred_boxes_xyxy
         sam3_out["pred_masks"] = pred_masks
         return sam3_out, aux
-

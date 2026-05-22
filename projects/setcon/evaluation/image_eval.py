@@ -58,12 +58,34 @@ def parse_args():
     return args
 
 
-def _load_model(model_path, device, confidence=0.5):
-    from projects.setcon.hf.models_qwen3vl.modeling_setcon_qwen import SetConChatModelQwen
+def _model_family(model_path):
+    config_path = Path(model_path) / "config.json"
+    with config_path.open("r", encoding="utf-8") as f:
+        config = json.load(f)
 
+    architectures = set(config.get("architectures") or [])
+    if "SetConChatModelQwen" in architectures or "text_config" in config:
+        return "qwen3vl"
+    if "SetConChatModel" in architectures or "llm_config" in config:
+        return "internvl"
+    raise ValueError(f"Unsupported SetCon model config: {config_path}")
+
+
+def _load_model(model_path, device, confidence=0.5):
+    family = _model_family(model_path)
     model_path_obj = Path(model_path)
     has_bin_weights = any(model_path_obj.glob("pytorch_model*.bin"))
-    wrapper = SetConChatModelQwen.from_pretrained(
+
+    if family == "qwen3vl":
+        from projects.setcon.hf.models_qwen3vl.modeling_setcon_qwen import SetConChatModelQwen
+
+        model_cls = SetConChatModelQwen
+    else:
+        from projects.setcon.hf.models.modeling_setcon_chat import SetConChatModel
+
+        model_cls = SetConChatModel
+
+    wrapper = model_cls.from_pretrained(
         model_path,
         trust_remote_code=True,
         dtype=torch.bfloat16,
@@ -76,6 +98,12 @@ def _load_model(model_path, device, confidence=0.5):
     wrapper.to(device)
     wrapper.eval()
     return wrapper
+
+
+def _load_processor(model_path):
+    if _model_family(model_path) == "qwen3vl":
+        return AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
+    return None
 
 
 def _prediction_token_item(target_pred):
@@ -135,7 +163,7 @@ def main():
     device = torch.device(f"cuda:{local_rank}")
     model = _load_model(args.model_path, device=device, confidence=args.confidence)
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
-    processor = AutoProcessor.from_pretrained(args.model_path, trust_remote_code=True)
+    processor = _load_processor(args.model_path)
 
     records = load_image_records(args.ann_file, image_root=args.image_root)
     local_records = [record for index, record in enumerate(records) if index % world_size == rank]

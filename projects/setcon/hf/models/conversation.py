@@ -238,7 +238,7 @@ class Conversation:
                     ret += role + ':'
             return ret
         elif self.sep_style == SeparatorStyle.MPT:
-            ret = system_prompt + self.sep
+            ret = system_prompt + self.sep if system_prompt else ''
             for role, message in self.messages:
                 if message:
                     if type(message) is tuple:
@@ -332,73 +332,14 @@ def get_conv_template(name: str) -> Conversation:
     return conv_templates[name].copy()
 
 
-# Both Hermes-2 and internlm2-chat are chatml-format conversation templates. The difference
-# is that during training, the preprocessing function for the Hermes-2 template doesn't add
-# <s> at the beginning of the tokenized sequence, while the internlm2-chat template does.
-# Therefore, they are completely equivalent during inference.
-register_conv_template(
-    Conversation(
-        name='Hermes-2',
-        system_template='<|im_start|>system\n{system_message}',
-        # note: The new system prompt was not used here to avoid changes in benchmark performance.
-        # system_message='我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。',
-        system_message='你是由上海人工智能实验室联合商汤科技开发的书生多模态大模型，英文名叫InternVL, 是一个有用无害的人工智能助手。',
-        roles=('<|im_start|>user\n', '<|im_start|>assistant\n'),
-        sep_style=SeparatorStyle.MPT,
-        sep='<|im_end|>',
-        stop_str='<|endoftext|>',
-    )
-)
-
-
-register_conv_template(
-    Conversation(
-        name='internlm2_chat',
-        system_template='<|im_start|>system\n{system_message}',
-        # note: The new system prompt was not used here to avoid changes in benchmark performance.
-        # system_message='我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。',
-        system_message='你是由上海人工智能实验室联合商汤科技开发的书生多模态大模型，英文名叫InternVL, 是一个有用无害的人工智能助手。',
-        roles=('<|im_start|>user\n', '<|im_start|>assistant\n'),
-        sep_style=SeparatorStyle.MPT,
-        sep='<|im_end|>',
-    )
-)
-
-
 register_conv_template(
     Conversation(
         name='qwen_chat',
-        system_template='<|im_start|>system\n{system_message}',
-        system_message='你是由上海人工智能实验室联合商汤科技开发的书生多模态大模型，英文名叫InternVL, 是一个有用无害的人工智能助手。',
+        system_template='',
+        system_message='',
         roles=('<|im_start|>user\n', '<|im_start|>assistant\n'),
         sep_style=SeparatorStyle.MPT,
         sep='<|im_end|>\n',
         stop_str=['<|im_end|>', '<|endoftext|>'],
-    )
-)
-
-
-register_conv_template(
-    Conversation(
-        name='phi3-chat',
-        system_template='<|system|>\n{system_message}',
-        # note: The new system prompt was not used here to avoid changes in benchmark performance.
-        # system_message='我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。',
-        system_message='你是由上海人工智能实验室联合商汤科技开发的书生多模态大模型，英文名叫InternVL, 是一个有用无害的人工智能助手。',
-        roles=('<|user|>\n', '<|assistant|>\n'),
-        sep_style=SeparatorStyle.MPT,
-        sep='<|end|>',
-    )
-)
-
-
-register_conv_template(
-    Conversation(
-        name='internvl2_5',
-        system_template='<|im_start|>system\n{system_message}',
-        system_message='你是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。',
-        roles=('<|im_start|>user\n', '<|im_start|>assistant\n'),
-        sep_style=SeparatorStyle.MPT,
-        sep='<|im_end|>\n',
     )
 )

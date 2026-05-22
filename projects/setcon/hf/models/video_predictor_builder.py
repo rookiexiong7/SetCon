@@ -1,13 +1,16 @@
 from typing import Optional
 
 import torch
-from transformers import AutoProcessor, AutoTokenizer
+from torch import nn
+from transformers import AutoTokenizer
 
-from .modeling_setcon_qwen import SetConChatModelQwen
-from .video_detector_adapter import SetConQwenVideoDetectorAdapter
+from .modeling_setcon_chat import SetConChatModel
+from .video_detector_adapter import SetConInternVLVideoDetectorAdapter
 from third_parts.sam3.model.model_misc import DotProductScoring, MLP
 from third_parts.sam3.model.sam3_image import Sam3ImageOnVideoMultiGPU
-from third_parts.sam3.model.sam3_video_inference import Sam3VideoInferenceWithInstanceInteractivity
+from third_parts.sam3.model.sam3_video_inference import (
+    Sam3VideoInferenceWithInstanceInteractivity,
+)
 from third_parts.sam3.model_builder import (
     _create_geometry_encoder,
     _create_sam3_transformer,
@@ -16,7 +19,6 @@ from third_parts.sam3.model_builder import (
     _create_vision_backbone,
     build_tracker,
 )
-from torch import nn
 
 
 def _load_sam3_ckpt_for_tracker_and_features(
@@ -63,7 +65,9 @@ def _build_sam3_feature_detector(
         out_norm=nn.LayerNorm(256),
     )
     main_dot_prod_scoring = DotProductScoring(
-        d_model=256, d_proj=256, prompt_mlp=main_dot_prod_mlp
+        d_model=256,
+        d_proj=256,
+        prompt_mlp=main_dot_prod_mlp,
     )
     return Sam3ImageOnVideoMultiGPU(
         num_feature_levels=1,
@@ -79,19 +83,17 @@ def _build_sam3_feature_detector(
     )
 
 
-def _build_qwen_model_bundle(
-    model_name_or_path: str, device,
-    processor_name_or_path: Optional[str] = None,
+def _build_internvl_model_bundle(
+    model_name_or_path: str,
+    device,
     tokenizer_name_or_path: Optional[str] = None,
     torch_dtype: Optional[torch.dtype] = None,
 ):
-    processor = AutoProcessor.from_pretrained(
-        processor_name_or_path or model_name_or_path, trust_remote_code=True
-    )
     tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_name_or_path or model_name_or_path, trust_remote_code=True
+        tokenizer_name_or_path or model_name_or_path,
+        trust_remote_code=True,
     )
-    model = SetConChatModelQwen.from_pretrained(
+    model = SetConChatModel.from_pretrained(
         model_name_or_path,
         trust_remote_code=True,
         torch_dtype=torch_dtype,
@@ -101,7 +103,7 @@ def _build_qwen_model_bundle(
     model.grounding_encoder.set_confidence_threshold(0.5)
     model.to(device)
     model.eval()
-    return model, processor, tokenizer
+    return model, tokenizer
 
 
 def build_setcon_video_model(
@@ -119,19 +121,23 @@ def build_setcon_video_model(
     torch_dtype: Optional[torch.dtype] = None,
     compile: bool = False,
 ) -> Sam3VideoInferenceWithInstanceInteractivity:
+    del processor_name_or_path
+
     tracker = build_tracker(apply_temporal_disambiguation=apply_temporal_disambiguation)
     feature_detector = _build_sam3_feature_detector(
-        bpe_path=bpe_path, has_presence_token=has_presence_token
+        bpe_path=bpe_path,
+        has_presence_token=has_presence_token,
     )
 
-    if model is None or processor is None or tokenizer is None:
-        model, processor, tokenizer = _build_qwen_model_bundle(
-            model_name_or_path=model_name_or_path, device=device,
-            processor_name_or_path=processor_name_or_path,
+    if model is None or tokenizer is None:
+        model, tokenizer = _build_internvl_model_bundle(
+            model_name_or_path=model_name_or_path,
+            device=device,
             tokenizer_name_or_path=tokenizer_name_or_path,
             torch_dtype=torch_dtype,
         )
-    detector = SetConQwenVideoDetectorAdapter(
+
+    detector = SetConInternVLVideoDetectorAdapter(
         feature_detector=feature_detector,
         setcon_model=model,
         processor=processor,
@@ -141,7 +147,7 @@ def build_setcon_video_model(
     )
 
     if apply_temporal_disambiguation:
-        model = Sam3VideoInferenceWithInstanceInteractivity(
+        video_model = Sam3VideoInferenceWithInstanceInteractivity(
             detector=detector,
             tracker=tracker,
             score_threshold_detection=0.5,
@@ -167,7 +173,7 @@ def build_setcon_video_model(
             compile_model=compile,
         )
     else:
-        model = Sam3VideoInferenceWithInstanceInteractivity(
+        video_model = Sam3VideoInferenceWithInstanceInteractivity(
             detector=detector,
             tracker=tracker,
             score_threshold_detection=0.5,
@@ -193,9 +199,10 @@ def build_setcon_video_model(
             compile_model=compile,
         )
 
-    model.to(device=device)
+    video_model.to(device=device)
     if sam3_checkpoint_path:
         _load_sam3_ckpt_for_tracker_and_features(
-            model=model, sam3_checkpoint_path=sam3_checkpoint_path
+            model=video_model,
+            sam3_checkpoint_path=sam3_checkpoint_path,
         )
-    return model
+    return video_model
