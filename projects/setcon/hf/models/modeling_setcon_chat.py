@@ -416,14 +416,23 @@ class SetConChatModel(PreTrainedModel):
         return [first_tokens] + [torch.cat([first_tokens, tokens], dim=0) for tokens in all_label_tokens[1:]]
 
     @torch.inference_mode()
-    def decode_hidden_states(self, image=None, sam_states=None, seg_hidden_states=None):
+    def decode_hidden_states(self, image=None, sam_states=None, seg_hidden_states=None,
+                             preprocessed_image=None, original_size=None):
         ret_masks = []
-        if image is None or seg_hidden_states is None or len(seg_hidden_states) == 0:
+        if (image is None and preprocessed_image is None) or seg_hidden_states is None or len(seg_hidden_states) == 0:
             return ret_masks
-        frame_tensor = self._to_chw(image)
         try:
             if sam_states is None:
-                sam_states = self.grounding_encoder.set_image(frame_tensor)
+                if preprocessed_image is not None:
+                    # Video path: image is already the tracker's resolution-sized
+                    oh, ow = original_size
+                    sam_states = self.grounding_encoder.set_image(
+                        preprocessed_image, preprocessed=True,
+                        original_height=oh, original_width=ow,
+                    )
+                else:
+                    frame_tensor = self._to_chw(image)
+                    sam_states = self.grounding_encoder.set_image(frame_tensor)
         except Exception as e:
             print('SAM3 Exception:', e)
             return [

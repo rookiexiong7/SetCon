@@ -9,7 +9,7 @@ from torch import nn
 
 
 class _BackboneProxy:
-    """Proxy SAM3 backbone calls and cache the latest text prompt for Qwen detector."""
+    """Proxy SAM3 backbone calls and cache the latest text prompt for the Qwen detector."""
 
     def __init__(self, adapter: "SetConQwenVideoDetectorAdapter", backbone: nn.Module):
         self._adapter = adapter
@@ -73,6 +73,16 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         img = img.permute(1, 2, 0).numpy()
         return Image.fromarray(img, mode="RGB")
 
+    def _preprocessed_frame(self, img_chw: torch.Tensor) -> torch.Tensor:
+        img = img_chw.detach().float()
+        mean = torch.tensor(self.image_mean, dtype=img.dtype, device=img.device).view(3, 1, 1)
+        std = torch.tensor(self.image_std, dtype=img.dtype, device=img.device).view(3, 1, 1)
+        img = img * std + mean                              # denorm to [0,1]
+        img = (img.clamp(0.0, 1.0) * 255.0).to(torch.uint8)  # uint8 truncation (== PIL)
+        img = img.float() / 255.0                            # ToDtype(float32, scale)
+        img = (img - mean) / std                             # Normalize(0.5, 0.5)
+        return img
+
     def _normalize_xyxy(self, boxes: np.ndarray, w: int, h: int) -> np.ndarray:
         boxes = boxes.astype(np.float32).reshape(-1, 4)
         # If likely cxcywh, convert to xyxy.
@@ -107,7 +117,8 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
 
     def _collect_setcon_dets(
         self,
-        frame_pil: Image.Image,
+        frame_tensor: torch.Tensor,
+        frame_hw: Tuple[int, int],
         seg_hidden_states: Optional[List[torch.Tensor]],
         text_prompt: str,
         target_h: int,
@@ -128,14 +139,16 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
                 torch.zeros((0,), device=device),
             )
 
+        frame_h, frame_w = frame_hw
         pred_list = self.setcon_model.decode_hidden_states(
-            image=frame_pil,
+            preprocessed_image=frame_tensor,
+            original_size=(frame_h, frame_w),
             seg_hidden_states=seg_hidden_states,
         )
 
 
         all_boxes, all_masks, all_scores = [], [], []
-        img_w, img_h = frame_pil.size
+        img_w, img_h = frame_w, frame_h
         for pred in pred_list:
             score_np = self._flatten_scores(pred.get("scores"))
             box_np = self._to_numpy(pred.get("boxes"))
@@ -224,7 +237,9 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         self._cached_hidden_states_per_segment = per_frame_hidden_states
 
     def forward_video_grounding_multigpu(self, **kwargs):
-        # 1) Run original SAM3 detector to keep backbone/tracker features unchanged.
+        # SetCon overwrites SAM3's own detection outputs (pred_logits/pred_boxes_xyxy/pred_masks) below,
+        # only its vision backbone features are needed for the tracker.
+        kwargs.setdefault("backbone_only", True)
         sam3_out, aux = self.feature_detector.forward_video_grounding_multigpu(**kwargs)
         # 2) Replace detection outputs with SetCon-Qwen outputs.
         text_prompt = self._last_text_batch[0] if len(self._last_text_batch) > 0 else ""
@@ -234,7 +249,8 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         
         frame_idx = int(kwargs["frame_idx"])
         frame_idx = max(0, min(total_frames - 1, frame_idx))
-        current_frame = self._tensor_to_pil(img_batch[frame_idx])
+        current_frame = self._preprocessed_frame(img_batch[frame_idx])
+        frame_hw = (int(img_batch.shape[-2]), int(img_batch.shape[-1]))
 
         self._ensure_video_cache(img_batch=img_batch, text_prompt=text_prompt)
         segment_idx = self._frame_to_segment(frame_idx, self._cached_sampled_indices)
@@ -244,7 +260,8 @@ class SetConQwenVideoDetectorAdapter(nn.Module):
         bsz, num_queries, mask_h, mask_w = pred_masks_ref.shape
         device = pred_masks_ref.device
         boxes, masks, scores = self._collect_setcon_dets(
-            frame_pil=current_frame,
+            frame_tensor=current_frame,
+            frame_hw=frame_hw,
             seg_hidden_states=seg_hidden_states,
             text_prompt=text_prompt,
             target_h=mask_h,

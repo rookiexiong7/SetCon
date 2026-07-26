@@ -492,6 +492,28 @@ class Sam3Image(torch.nn.Module):
             self._compute_matching(out, self.back_convert(find_target))
         return out
 
+    def forward_grounding_backbone_only(self, backbone_out, find_input):
+        """Run only the vision backbone (via _get_img_feats) and return dummy detection outputs."""
+        # Populate backbone_out with vision features (runs backbone.forward_image
+        # on the fly if not cached); sam2_backbone_out is a by-product.
+        backbone_out, img_feats, _, vis_feat_sizes = self._get_img_feats(
+            backbone_out, find_input.img_ids
+        )
+        num_prompts = find_input.text_ids.numel()
+        num_queries = self.transformer.decoder.query_embed.weight.shape[0]
+
+        mask_h, mask_w = backbone_out["backbone_fpn"][0].shape[-2:]
+        device = img_feats[0].device
+        dtype = img_feats[0].dtype
+        dummy_out = {
+            "prev_encoder_out": {"backbone_out": backbone_out},
+            "pred_logits": torch.full((num_prompts, num_queries, 1), -1e4, device=device, dtype=dtype),
+            "pred_boxes": torch.zeros((num_prompts, num_queries, 4), device=device, dtype=dtype),
+            "pred_boxes_xyxy": torch.zeros((num_prompts, num_queries, 4), device=device, dtype=dtype),
+            "pred_masks": torch.full((num_prompts, num_queries, mask_h, mask_w), -10.0, device=device, dtype=dtype),
+        }
+        return dummy_out
+
     def _postprocess_out(self, out: Dict, multimask_output: bool = False):
         # For multimask output, during eval we return the single best mask with the dict keys expected by the evaluators, but also return the multimasks output with new keys.
         num_mask_boxes = out["pred_boxes"].size(1)
@@ -720,6 +742,7 @@ class Sam3ImageOnVideoMultiGPU(Sam3Image):
         Compute the detector's detection outputs in a distributed manner, where all GPUs process
         a chunk of frames (equal to the number of GPUs) at once and store them in cache.
         """
+        backbone_only = kwargs.get("backbone_only", False)
         # Step 1: fetch the detector outputs in the current chunk from buffer
         frame_idx_curr_b = frame_idx - frame_idx % self.world_size
         frame_idx_curr_e = min(frame_idx_curr_b + self.world_size, num_frames)
@@ -738,6 +761,7 @@ class Sam3ImageOnVideoMultiGPU(Sam3Image):
                     run_nms=run_nms,
                     nms_prob_thresh=nms_prob_thresh,
                     nms_iou_thresh=nms_iou_thresh,
+                    backbone_only=backbone_only,
                 )
 
         # read out the current frame's results from `multigpu_buffer`
@@ -785,6 +809,7 @@ class Sam3ImageOnVideoMultiGPU(Sam3Image):
                     run_nms=run_nms,
                     nms_prob_thresh=nms_prob_thresh,
                     nms_iou_thresh=nms_iou_thresh,
+                    backbone_only=backbone_only,
                 )
 
         return out, backbone_out
@@ -801,19 +826,29 @@ class Sam3ImageOnVideoMultiGPU(Sam3Image):
         run_nms=False,
         nms_prob_thresh=None,
         nms_iou_thresh=None,
+        backbone_only=False,
     ):
         """Compute detection outputs on a chunk of frames and store their results in multigpu_buffer."""
         # each GPU computes detections on one frame in the chunk (in a round-robin manner)
         frame_idx_local_gpu = min(frame_idx_begin + self.rank, frame_idx_end - 1)
         # `forward_grounding` (from base class `Sam3ImageOnVideo`) runs the detector on a single frame
         with torch.profiler.record_function("forward_grounding"):
-            out_local = self.forward_grounding(
-                backbone_out=backbone_out,
-                find_input=find_inputs[frame_idx_local_gpu],
-                find_target=None,
-                geometric_prompt=geometric_prompt,
-            )
-        if run_nms:
+            if backbone_only:
+                # Skip the detector's encoder-fusion + decoder + segmentation head
+                # (their pred_* outputs are discarded by the SetCon adapter). Only
+                # the vision backbone features are needed for the tracker.
+                out_local = self.forward_grounding_backbone_only(
+                    backbone_out=backbone_out,
+                    find_input=find_inputs[frame_idx_local_gpu],
+                )
+            else:
+                out_local = self.forward_grounding(
+                    backbone_out=backbone_out,
+                    find_input=find_inputs[frame_idx_local_gpu],
+                    find_target=None,
+                    geometric_prompt=geometric_prompt,
+                )
+        if run_nms and not backbone_only:
             with torch.profiler.record_function("nms_masks"):
                 # run NMS as a post-processing step on top of the detection outputs
                 assert nms_prob_thresh is not None and nms_iou_thresh is not None

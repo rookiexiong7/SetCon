@@ -60,20 +60,36 @@ class SAM3Runner(BaseModule):
         return state
 
     @torch.inference_mode()
-    def set_image(self, image, state=None):
-        """Sets the image on which we want to do predictions."""
+    def set_image(self, image, state=None, preprocessed=False,
+                  original_height=None, original_width=None):
+        """Sets the image on which we want to do predictions.
+
+        If ``preprocessed`` is True, ``image`` is already a resolution-sized,
+        mean/std-normalized CHW/1CHW tensor (e.g. the SAM3 tracker's per-frame
+        ``img_batch[frame_idx]``), so the resize+normalize transform is skipped
+        and the original frame size must be supplied via original_height/width.
+        This avoids a redundant tensor->PIL->tensor round-trip in the video path.
+        """
         if state is None:
             state = {}
 
-        if isinstance(image, Image.Image):
-            width, height = image.size
-        elif isinstance(image, (torch.Tensor, np.ndarray)):
-            height, width = image.shape[-2:]
+        if preprocessed:
+            if original_height is None or original_width is None:
+                raise ValueError("preprocessed=True requires original_height/width")
+            height, width = original_height, original_width
+            image = image.to(self.device)
+            if image.dim() == 3:
+                image = image.unsqueeze(0)
         else:
-            raise ValueError("Image must be a PIL image or a tensor")
+            if isinstance(image, Image.Image):
+                width, height = image.size
+            elif isinstance(image, (torch.Tensor, np.ndarray)):
+                height, width = image.shape[-2:]
+            else:
+                raise ValueError("Image must be a PIL image or a tensor")
 
-        image = v2.functional.to_image(image).to(self.device)
-        image = self.transform(image).unsqueeze(0)
+            image = v2.functional.to_image(image).to(self.device)
+            image = self.transform(image).unsqueeze(0)
 
         state["original_height"] = height
         state["original_width"] = width
