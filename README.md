@@ -1,4 +1,4 @@
-# SetCon: Towards Open-Ended Referring Segmentation via Set-Level Concept Prediction
+# SetCon: Towards Open-Ended Referring Segmentation via Set-Level Concept Prediction (NeurIPS 2026)
 
 Official implementation of **SetCon: Towards Open-Ended Referring Segmentation via Set-Level Concept Prediction**.
 
