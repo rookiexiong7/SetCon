@@ -19,6 +19,7 @@ Official implementation of **SetCon: Towards Open-Ended Referring Segmentation v
 </p>
 
 ## 📜 News
+🚀 [2026/9/25] SetCon is accepted to NeurIPS 2026. See you in Sydney!
 🚀 [2026/5/20] The [Paper](https://arxiv.org/abs/2605.20110) and [Code](https://github.com/rookiexiong7/SetCon) are released!
 
 ## 🔥 Highlights
