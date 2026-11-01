@@ -122,7 +122,7 @@ python tools/convert_to_hf.py projects/setcon/configs/setcon_qwenvl_8b.py --pth-
 ```
 
 
-### 6. Grounding DINO grounding encoder
+#### Grounding DINO
 
 Grounding DINO can replace SAM 3 for language-conditioned box prediction. The
 LVLM concept embeddings replace Grounding DINO's BERT embeddings; training uses
