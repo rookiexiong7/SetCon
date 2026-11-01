@@ -123,7 +123,7 @@ class SetConChatModel(PreTrainedModel):
     base_model_prefix = 'language_model'
     _supports_flash_attn_2 = True
     supports_gradient_checkpointing = True
-    _no_split_modules = ['InternVisionModel', 'Qwen3DecoderLayer', 'SAM3Runner']
+    _no_split_modules = ['InternVisionModel', 'Qwen3DecoderLayer', 'SAM3Runner', 'GroundingDinoRunner']
     _tp_plan = ''
 
     def __init__(self, config: SetConChatConfig, vision_model=None, language_model=None, use_flash_attn=True):
@@ -172,7 +172,12 @@ class SetConChatModel(PreTrainedModel):
         self.conv_template = get_conv_template(self.template)
         self.system_message = self.conv_template.system_message
 
-        self.grounding_encoder = SAM3Runner()
+        self.grounding_encoder_type = getattr(config, 'grounding_encoder_type', 'sam3')
+        if self.grounding_encoder_type == 'groundingdino':
+            from .groundingdino_runner import GroundingDinoRunner
+            self.grounding_encoder = GroundingDinoRunner()
+        else:
+            self.grounding_encoder = SAM3Runner()
         self.text_hidden_fcs = nn.Sequential(
             nn.Linear(llm_hidden_size, llm_hidden_size),
             nn.ReLU(inplace=True),

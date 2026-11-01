@@ -15,10 +15,12 @@ class SetConChatConfigQwen(Qwen3VLConfig):
     def __init__(
             self,
             template=None,
+            grounding_encoder_type='sam3',
             **kwargs
         ):
         super().__init__(**kwargs)
         self.template = template
+        self.grounding_encoder_type = grounding_encoder_type
 
     def to_dict(self):
         """
@@ -30,5 +32,6 @@ class SetConChatConfigQwen(Qwen3VLConfig):
 
         output = super().to_dict()
         output["template"] = self.template
+        output["grounding_encoder_type"] = self.grounding_encoder_type
 
         return output

@@ -43,6 +43,17 @@ class SAM3TrainRunner(BaseModule):
         self.hidden_dim = self.sam3_model.backbone.language_backbone.d_model
 
         self.build_loss_fn(loss_fn)
+
+    def configure_trainable(self):
+        """Freeze all of SAM3 except the transformer encoder; keep decoder frozen."""
+        self.requires_grad_(False)
+        self.sam3_model.transformer.requires_grad_(True)
+        self.sam3_model.transformer.decoder.requires_grad_(False)
+
+    def state_dict_save_prefixes(self):
+        """Prefixes (relative to the grounding_encoder) to persist in checkpoints."""
+        return ('sam3_model',)
+
     
     def build_loss_fn(self, loss_fn):
         self.loss_fn = BUILDER.build(loss_fn)

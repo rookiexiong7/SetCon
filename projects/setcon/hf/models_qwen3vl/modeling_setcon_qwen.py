@@ -16,7 +16,7 @@ class SetConChatModelQwen(PreTrainedModel):
     config_class = SetConChatConfigQwen
     main_input_name = 'pixel_values'
     base_model_prefix = 'language_model'
-    _no_split_modules = ['Qwen3VisionTransformerPretrainedModel', 'Qwen3VLDecoderLayer', 'SAM2']
+    _no_split_modules = ['Qwen3VisionTransformerPretrainedModel', 'Qwen3VLDecoderLayer', 'SAM2', 'GroundingDinoRunner']
     _supports_flash_attn_2 = True
     supports_gradient_checkpointing = True
 
@@ -38,7 +38,12 @@ class SetConChatModelQwen(PreTrainedModel):
 
         llm_hidden_size = config.text_config.hidden_size
 
-        self.grounding_encoder = SAM3Runner()
+        self.grounding_encoder_type = getattr(config, 'grounding_encoder_type', 'sam3')
+        if self.grounding_encoder_type == 'groundingdino':
+            from .groundingdino_runner import GroundingDinoRunner
+            self.grounding_encoder = GroundingDinoRunner()
+        else:
+            self.grounding_encoder = SAM3Runner()
         
         out_dim = self.grounding_encoder.hidden_dim
         in_dim = llm_hidden_size

@@ -1,5 +1,6 @@
 from .setcon import SetConModel
 from .sam3_train import SAM3TrainRunner
-
-__all__ = ['SetConModel', 'SAM3TrainRunner', 'DirectResize']
+from .groundingdino_train import GroundingDinoTrainRunner
 from .preprocess import DirectResize
+
+__all__ = ['SetConModel', 'SAM3TrainRunner', 'GroundingDinoTrainRunner', 'DirectResize']

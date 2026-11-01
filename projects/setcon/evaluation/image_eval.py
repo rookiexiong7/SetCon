@@ -92,9 +92,19 @@ def _load_model(model_path, device, confidence=0.5):
         low_cpu_mem_usage=False,
         use_safetensors=not has_bin_weights,
     )
-    wrapper.grounding_encoder.sam3_model.to(device)
-    wrapper.grounding_encoder.device = device
-    wrapper.grounding_encoder.set_confidence_threshold(confidence)
+    ge = wrapper.grounding_encoder
+    # SAM3Runner holds its model under .sam3_model and tracks device via a
+    # writable attribute; moving the runner as a whole can leave sam3_model's
+    # params on meta, so move it explicitly (this is the path that works).
+    if hasattr(ge, 'sam3_model'):
+        ge.sam3_model.to(device)
+    ge.to(device)
+    # GroundingDinoRunner has a read-only device property; SAM3Runner is writable.
+    try:
+        ge.device = device
+    except AttributeError:
+        pass
+    ge.set_confidence_threshold(confidence)
     wrapper.to(device)
     wrapper.eval()
     return wrapper

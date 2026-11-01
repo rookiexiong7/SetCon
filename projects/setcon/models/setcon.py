@@ -52,9 +52,7 @@ class SetConModel(BaseModel):
             self.mllm._init_processor(image_processor, video_processor)
 
         self.grounding_encoder = BUILDER.build(grounding_encoder)
-        self.grounding_encoder.requires_grad_(False)
-        self.grounding_encoder.sam3_model.transformer.requires_grad_(True)
-        self.grounding_encoder.sam3_model.transformer.decoder.requires_grad_(False)
+        self.grounding_encoder.configure_trainable()
 
         # FIX: Untie weights for Qwen model
         if self.arch_type == 'qwen' and self.mllm.model.config.tie_word_embeddings:
@@ -227,13 +225,18 @@ class SetConModel(BaseModel):
     def state_dict(self, *args, **kwargs):
         prefix = kwargs.pop('prefix', '')
         state_dict_mllm = self.mllm.state_dict(*args, prefix=prefix + 'mllm.', **kwargs)
-        state_dict_sam2 = self.grounding_encoder.state_dict(*args, prefix=prefix + 'grounding_encoder.', **kwargs)
+        state_dict_ge = self.grounding_encoder.state_dict(*args, prefix=prefix + 'grounding_encoder.', **kwargs)
         state_dict_text = self.text_hidden_fcs.state_dict(*args, prefix=prefix + 'text_hidden_fcs.', **kwargs)
+        ge_prefixes = tuple(
+            prefix + 'grounding_encoder.' + p
+            for p in self.grounding_encoder.state_dict_save_prefixes()
+        )
         to_return = OrderedDict()
         to_return.update(state_dict_mllm)
         to_return.update(
             {k: v
-             for k, v in state_dict_sam2.items() if k.startswith('grounding_encoder.sam3_model')})
+             for k, v in state_dict_ge.items()
+             if any(k == p or k.startswith(p + '.') for p in ge_prefixes)})
         to_return.update(state_dict_text)
         return to_return
 

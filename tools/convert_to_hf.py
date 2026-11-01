@@ -176,6 +176,17 @@ def main():
 
     config_dict["template"] = template_str
 
+    # Propagate the grounding-encoder choice so the HF model builds the matching
+    # runner (SAM3Runner / GroundingDinoRunner) and loads
+    # its weights correctly.
+    ge_type = cfg.model.get('grounding_encoder', {}).get('type', None)
+    ge_type_name = getattr(ge_type, '__name__', str(ge_type))
+    if 'GroundingDino' in ge_type_name:
+        config_dict['grounding_encoder_type'] = 'groundingdino'
+    else:
+        config_dict['grounding_encoder_type'] = 'sam3'
+    print(f"grounding_encoder_type: {config_dict['grounding_encoder_type']} (from {ge_type_name})")
+
 
     if 'qwen' in arch_type:
         # for qwen
@@ -227,7 +238,25 @@ def main():
 
     if '_training_step' in all_state_dict_new:
         all_state_dict_new.pop('_training_step')
-    missing_keys, unexpected_keys = hf_setcon_model.load_state_dict(all_state_dict_new)
+    # strict=False: frozen auxiliary modules (e.g. GroundingDinoRunner's SAM3
+    # box->mask model) are loaded at build time via from_pretrained / sam3.pt and
+    # are intentionally NOT saved in the training checkpoint, so their keys are
+    # "missing" here by design. We assert below that every missing key belongs to
+    # such a frozen aux module, so no trainable weight is silently left unloaded.
+    missing_keys, unexpected_keys = hf_setcon_model.load_state_dict(all_state_dict_new, strict=False)
+    frozen_aux_prefixes = (
+        ('grounding_encoder.sam3_model.',)
+        if config_dict['grounding_encoder_type'] == 'groundingdino' else ()
+    )
+    real_missing = [k for k in missing_keys if not k.startswith(frozen_aux_prefixes)]
+    if real_missing:
+        raise RuntimeError(
+            f"{len(real_missing)} non-aux weights missing from checkpoint (first 20): {real_missing[:20]}"
+        )
+    if unexpected_keys:
+        raise RuntimeError(f"Unexpected checkpoint weights (first 20): {unexpected_keys[:20]}")
+    if missing_keys:
+        master_print(f"Note: {len(missing_keys)} frozen-aux keys loaded at build time (sam3_model), not from ckpt.")
 
     if args.save_path is None:
         args.save_path = f"./{os.path.dirname(args.pth_model)}_{iter_str}_hf"

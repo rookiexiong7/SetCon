@@ -122,6 +122,37 @@ python tools/convert_to_hf.py projects/setcon/configs/setcon_qwenvl_8b.py --pth-
 ```
 
 
+### 6. Grounding DINO grounding encoder
+
+Grounding DINO can replace SAM 3 for language-conditioned box prediction. The
+LVLM concept embeddings replace Grounding DINO's BERT embeddings; training uses
+box and classification losses. During image inference, frozen SAM 3 converts
+predicted boxes to masks.
+
+The default detector is `IDEA-Research/grounding-dino-base`. To use local weights,
+set `SETCON_GD_PRETRAINED_PATH` to the pretrained directory before training,
+conversion, or inference. SAM 3 weights are still required for inference at
+`pretrained/sam3/sam3.pt`.
+
+Update `COCO_IMAGE_ROOT`, `REASONSEG_IMAGE_ROOT`, and the LVLM `path` in the chosen
+config, then train either backbone:
+
+```bash
+bash tools/dist.sh train projects/setcon/configs/setcon_qwenvl_8b_gd.py 8
+bash tools/dist.sh train projects/setcon/configs/setcon_internvl_8b_gd.py 8
+```
+
+Convert with the matching training config:
+
+```bash
+python tools/convert_to_hf.py projects/setcon/configs/setcon_qwenvl_8b_gd.py \
+  --pth-model PATH_TO_PTH_MODEL --save-path PATH_TO_SAVE_FOLDER
+```
+
+The exported `grounding_encoder_type` selects the Grounding DINO inference
+runner automatically. These configs use image datasets; video inference uses
+the SAM 3 grounding encoder.
+
 ## ❤️ Acknowledgments and License
 This repository is licensed under the [Apache License 2.0](LICENSE).
 
